@@ -174,3 +174,14 @@ module test04 '../main.bicep' = {
   }
 }
 
+// Test 05 -  Disable TLS
+module test05 '../main.bicep' = {
+  name: 'test05-${uniqueName}'
+  params: {
+    location: location
+    administratorLogin: administratorLogin
+    administratorLoginPassword: administratorLoginPassword
+    serverName: 'test05-${uniqueName}'
+    minimalTlsVersion: 'TLSEnforcementDisabled'
+  }
+}

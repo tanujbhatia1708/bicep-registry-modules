@@ -1,4 +1,4 @@
-targetScope = 'resourceGroup'
+targetScope = 'resourceGroup' //OK
 
 @description('Deployment region name. Default is the location of the resource group.')
 param location string = resourceGroup().location
@@ -53,14 +53,16 @@ param privateEndpoints array = []
 ])
 param geoRedundantBackup string = 'Enabled'
 
-@description('Optional. Enforce a minimal Tls version for the server.')
+@description('Optional. Enforce a minimal Tls version for the server.') //OK
 @allowed([
   'TLS1_0'
   'TLS1_1'
   'TLS1_2'
   'TLSEnforcementDisabled'
 ])
-param minimalTlsVersion string = 'TLS1_2'
+param minimalTlsVersion string = 'TLS1_2' //OK
+
+var sslEnforcement = (minimalTlsVersion == 'TLSEnforcementDisabled') ? 'Disabled' : 'Enabled'
 
 @description('Optional. Restore point creation time (ISO8601 format), specifying the time to restore from.')
 param restorePointInTime string = ''
@@ -80,13 +82,6 @@ param skuName string = 'GP_Gen5_2'
 
 @description('Optional. The source server resource id to restore from, e.g. "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg1/providers/Microsoft.DBforMySQL/flexibleServers/server1" . It\'s required when "createMode" is "GeoRestore" or "Replica" or "PointInTimeRestore".')
 param sourceServerResourceId string = ''
-
-@description('Optional. Enable ssl enforcement or not when connect to server.')
-@allowed([
-  'Enabled'
-  'Disabled'
-])
-param sslEnforcement string = 'Enabled'
 
 @description('Optional. Auto grow of storage.')
 param storageAutogrow bool = true
@@ -136,9 +131,9 @@ resource mysqlServer 'Microsoft.DBforMySQL/servers@2017-12-01' = {
     administratorLogin: administratorLogin
     administratorLoginPassword: administratorLoginPassword
     version: version
+    sslEnforcement: sslEnforcement
     minimalTlsVersion: minimalTlsVersion
     infrastructureEncryption: infrastructureEncryption
-    sslEnforcement: sslEnforcement
     storageProfile: {
       storageMB: storageSizeGB * 1024
       backupRetentionDays: backupRetentionDays
