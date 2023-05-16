@@ -48,14 +48,54 @@ resource virtualNetworkLinks 'Microsoft.Network/privateDnsZones/virtualNetworkLi
   }
 }
 
-resource managedIdentity_01 'Microsoft.ManagedIdentity/userAssignedIdentities@2018-11-30' = {
+resource managedIdentity01 'Microsoft.ManagedIdentity/userAssignedIdentities@2018-11-30' = {
   name: '${name}-${prefix}-01'
   location: location
 }
 
-resource managedIdentity_02 'Microsoft.ManagedIdentity/userAssignedIdentities@2018-11-30' = {
+resource managedIdentity02 'Microsoft.ManagedIdentity/userAssignedIdentities@2018-11-30' = {
   name: '${name}-${prefix}-02'
   location: location
+}
+
+// ---- diagnosticSettings destination ----
+resource logAnalyticsWorkspace 'Microsoft.OperationalInsights/workspaces@2022-10-01' = {
+  name: '${name}-${prefix}-law'
+  location: location
+}
+
+resource storageAccount 'Microsoft.Storage/storageAccounts@2022-05-01' = {
+  name: '${prefix}${name}01'
+  kind: 'StorageV2'
+  sku: {
+    name: 'Standard_LRS'
+  }
+  location: location
+  properties: {
+    allowBlobPublicAccess: false
+  }
+}
+
+resource eventHubNamespace 'Microsoft.EventHub/namespaces@2021-11-01' = {
+  name: '${prefix}-evhns-${name}-01'
+  location: location
+}
+
+resource eventHub 'Microsoft.EventHub/namespaces/eventhubs@2021-11-01' = {
+  name: '${prefix}-evh-${name}-01'
+  parent: eventHubNamespace
+}
+
+resource authorizationRule 'Microsoft.EventHub/namespaces/authorizationRules@2022-01-01-preview' = {
+  name: 'RootManageSharedAccessKey'
+  properties: {
+    rights: [
+      'Listen'
+      'Manage'
+      'Send'
+    ]
+  }
+  parent: eventHubNamespace
 }
 
 output vnetId string = virtualNetwork.id
@@ -66,6 +106,13 @@ output subnetIds array = [
 output privateDNSZoneId string = privateDNSZone.id
 
 output identityPrincipalIds array = [
-  managedIdentity_01.properties.principalId
-  managedIdentity_02.properties.principalId
+  managedIdentity01.properties.principalId
+  managedIdentity02.properties.principalId
 ]
+
+// diagnosticSettings destinations
+output workspaceId string = logAnalyticsWorkspace.id
+output storageAccountId string = storageAccount.id
+output eventHubNamespaceId string = eventHubNamespace.id
+output eventHubName string = eventHub.name
+output eventHubAuthorizationRuleId string = authorizationRule.id
