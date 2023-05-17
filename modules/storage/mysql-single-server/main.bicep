@@ -140,8 +140,8 @@ resource mysqlServer 'Microsoft.DBforMySQL/servers@2017-12-01' = {
   }
   properties: {
     createMode: createMode
-    administratorLogin: validAdministratorLogin
-    administratorLoginPassword: validAdministratorLoginPassword
+    administratorLogin: validAdministratorLogin ?? null
+    administratorLoginPassword: validAdministratorLoginPassword ?? null
     version: version
     sslEnforcement: sslEnforcement
     minimalTlsVersion: minimalTlsVersion
