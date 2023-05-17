@@ -222,7 +222,7 @@ module mysqlPrivateEndpoint 'modules/privateEndpoint.bicep' = {
 }
 
 // ------ Diagnostics settings ------
-// May the diagnosticSettings part become a module? How can I share the type cross module?
+// May the diagnosticSettings become a module? How can I share the type cross module?
 @description('Provide mysql diagnostic settings properties.')
 param diagnosticSettingsProperties diagnosticSettingsPropertiesType = {}
 
