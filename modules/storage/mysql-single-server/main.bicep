@@ -1,9 +1,18 @@
 targetScope = 'resourceGroup'
 
-@description('Deployment region name. Default is the location of the resource group.')
+@description('Optional. Deployment region name. Default is the location of the resource group.')
 param location string = resourceGroup().location
 
-@description('Deployment tags. Default is empty map.')
+@description('Optional. Prefix of mysql resource name. Not used if name is provided.')
+param prefix string = 'mysql'
+
+@description('Optional. The name of the Mysql DB resources. Character limit: 3-44, valid characters: lowercase letters, numbers, and hyphens. It must me unique across Azure.')
+param name string = take('${prefix}-${uniqueString(resourceGroup().id, location)}', 44)
+
+@description('Optional. Override the name of the server.')
+param serverName string = name
+
+@description('Optional. Deployment tags.')
 param tags object = {}
 
 @description('Required. The administrator username of the server. Can only be specified when the server is being created.')
@@ -32,30 +41,8 @@ param serverConfigurations array = []
 @allowed(['Enabled', 'Disabled'])
 param infrastructureEncryption string = 'Disabled'
 
-type firewallRulesType = {
-  @minLength(1)
-  @maxLength(128)
-  @description('The resource name.')
-  name: string
-  @description('The start IP address of the server firewall rule. Must be IPv4 format.')
-  startIpAddress: string
-  @description('The end IP address of the server firewall rule. Must be IPv4 format.')
-  endIpAddress: string
-}[]
-
 @description('Optional. List of firewall rules to create on server.')
-param firewallRules firewallRulesType = []
-
-type virtualNetworkRuleType = {
-  @minLength(1)
-  @maxLength(128)
-  @description('The resource name.')
-  name: string
-  @description('Create firewall rule before the virtual network has vnet service endpoint enabled.')
-  ignoreMissingVnetServiceEndpoint: bool
-  @description('The ARM resource id of the virtual network subnet.')
-  virtualNetworkSubnetId: string
-}
+param firewallRules firewallRulesType[] = []
 
 @description('Optional. List of virtualNetworkRules to create on mysql server.')
 param virtualNetworkRules virtualNetworkRuleType[] = []
@@ -63,9 +50,9 @@ param virtualNetworkRules virtualNetworkRuleType[] = []
 @description('Optional. List of privateEndpoints to create on mysql server.')
 param privateEndpoints array = []
 
-@description('Optional. Enable or disable geo-redundant backups.')
+@description('Optional. Enable or disable geo-redundant backups. It requires at least a GeneralPurpose or MemoryOptimized skuTier.')
 @allowed(['Enabled','Disabled'])
-param geoRedundantBackup string = 'Enabled'
+param geoRedundantBackup string = 'Disabled'
 
 @description('Optional. Enforce a minimal Tls version for the server.')
 @allowed(['TLS1_0', 'TLS1_1', 'TLS1_2', 'TLSEnforcementDisabled'])
@@ -77,15 +64,28 @@ var sslEnforcement = (minimalTlsVersion == 'TLSEnforcementDisabled') ? 'Disabled
 param restorePointInTime string = ''
 
 @description('Optional. Whether or not public network access is allowed for this server.')
-@allowed(['Enabled','Disabled'
-])
+@allowed(['Enabled','Disabled'])
 param publicNetworkAccess string = 'Disabled'
 
-@description('Required. The name of the server.')
-param serverName string
-
-@description('Optional.	The name of the sku, typically, tier + family + cores, e.g. B_Gen4_1, GP_Gen5_8.')
+@description('Optional. The name of the sku, typically, tier + family + cores, e.g. B_Gen4_1, GP_Gen5_8.')
 param skuName string = 'GP_Gen5_2'
+
+@description('Optional. Azure database for MySQL compute capacity in vCores (2,4,8,16,32)')
+param skuCapacity int = 2
+
+@description('Optional. Azure database for MySQL Sku Size ')
+param SkuSizeMB int = 5120
+
+@description('Optional. Azure database for MySQL pricing tier')
+@allowed([
+  'Basic'
+  'GeneralPurpose'
+  'MemoryOptimized'
+])
+param SkuTier string = 'GeneralPurpose'
+
+@description('Optional. Azure database for MySQL sku family')
+param skuFamily string = 'Gen5'
 
 @description('Optional. The source server resource id to restore from. It\'s required when "createMode" is "GeoRestore" or "Replica" or "PointInTimeRestore".')
 param sourceServerResourceId string = ''
@@ -94,7 +94,7 @@ param sourceServerResourceId string = ''
 param enableStorageAutogrow bool = true
 
 @description('Validate input parameter for storageAutogrow')
-var validStorageAutogrow = createMode == 'Replica' ? null : (enableStorageAutogrow ? 'Enabled' : 'Disabled')
+var validStorageAutogrow = createMode == 'Replica' ? '' : (enableStorageAutogrow ? 'Enabled' : 'Disabled')
 
 @description('Optional. The storage size of the server.')
 param storageSizeGB int = 32
@@ -103,9 +103,11 @@ param storageSizeGB int = 32
 @allowed(['5.6', '5.7', '8.0'])
 param version string = '8.0'
 
-@description('Array of role assignment objects that contain the "roleDefinitionIdOrName" and "principalId" to define RBAC role assignments on this resource. In the roleDefinitionIdOrName attribute, provide either the display name of the role definition, or its fully qualified ID in the following format: "/providers/Microsoft.Authorization/roleDefinitions/c2f4ef07-c644-48eb-af81-4b1b4947fb11"')
+@description('Optional. Array of role assignment objects that contain the "roleDefinitionIdOrName" and "principalId" to define RBAC role assignments on this resource.')
 param roleAssignments array = []
 
+// Should I share the same type defined in the modules/privateEndpoint?
+// The real difference is that here I can set some defaults.
 var varPrivateEndpoints = [for endpoint in privateEndpoints: {
   name: '${mysqlServer.name}-${endpoint.name}'
   privateLinkServiceId: mysqlServer.id
@@ -113,13 +115,9 @@ var varPrivateEndpoints = [for endpoint in privateEndpoints: {
     endpoint.groupId
   ]
   subnetId: endpoint.subnetId
-  privateDnsZones: contains(endpoint, 'privateDnsZoneId') ? [
-    {
-      name: 'default'
-      zoneId: endpoint.privateDnsZoneId
-    }
-  ] : []
-  manualApprovalEnabled: contains(endpoint, 'manualApprovalEnabled') ? endpoint.manualApprovalEnabled : false
+  privateDnsZoneConfigs: endpoint.?privateDnsZoneConfigs ?? []
+  customNetworkInterfaceName: endpoint.?customNetworkInterfaceName ?? null
+  manualApprovalEnabled: endpoint.?manualApprovalEnabled ?? false
 }]
 
 resource mysqlServer 'Microsoft.DBforMySQL/servers@2017-12-01' = {
@@ -128,6 +126,10 @@ resource mysqlServer 'Microsoft.DBforMySQL/servers@2017-12-01' = {
   tags: tags
   sku: {
     name: skuName
+    tier: SkuTier
+    capacity: skuCapacity
+    size: '${SkuSizeMB}'  //a string is expected here but a int for the storageProfile...
+    family: skuFamily
   }
   identity: {
     type: 'SystemAssigned'
@@ -144,7 +146,7 @@ resource mysqlServer 'Microsoft.DBforMySQL/servers@2017-12-01' = {
       storageMB: storageSizeGB * 1024
       backupRetentionDays: backupRetentionDays
       geoRedundantBackup: geoRedundantBackup
-      storageAutogrow: validStorageAutogrow
+      storageAutogrow: validStorageAutogrow ?? null
     }
     publicNetworkAccess: publicNetworkAccess
     sourceServerId: createMode != 'Default' ? sourceServerResourceId : null
@@ -176,8 +178,8 @@ resource mysqlServerDatabases 'Microsoft.DBforMySQL/servers/databases@2017-12-01
   parent: mysqlServer
 
   properties: {
-    charset: contains(database, 'charset') ? database.charset : 'utf32'
-    collation: contains(database, 'collation') ? database.collation : 'utf32_general_ci'
+    charset: database.?charset ?? 'utf32'
+    collation: database.?collation ?? 'utf32_general_ci'
   }
 }]
 
@@ -196,18 +198,18 @@ resource mysqlServerConfig 'Microsoft.DBforMySQL/servers/configurations@2017-12-
 
 @batchSize(1)
 module mysqlRbac 'modules/rbac.bicep' = [for (roleAssignment, index) in roleAssignments: {
-  name: 'mysql-rbac-${uniqueString(deployment().name, location)}-${index}'
+  name: '${serverName}-rbac-${index}'
   params: {
-    description: contains(roleAssignment, 'description') ? roleAssignment.description : ''
+    description: roleAssignment.?description ?? ''
     principalIds: roleAssignment.principalIds
     roleDefinitionIdOrName: roleAssignment.roleDefinitionIdOrName
-    principalType: contains(roleAssignment, 'principalType') ? roleAssignment.principalType : ''
+    principalType: roleAssignment.?principalType ?? ''
     serverName: serverName
   }
 }]
 
 module mysqlPrivateEndpoint 'modules/privateEndpoint.bicep' = {
-  name: '${serverName}-${uniqueString(deployment().name, location)}-private-endpoints'
+  name: '${serverName}-private-endpoints'
   params: {
     location: location
     privateEndpoints: varPrivateEndpoints
@@ -216,6 +218,36 @@ module mysqlPrivateEndpoint 'modules/privateEndpoint.bicep' = {
 }
 
 // ------ Diagnostics settings ------
+// May the diagnosticSettings part become a module? How can I share the type cross module?
+@description('Provide mysql diagnostic settings properties.')
+param diagnosticSettingsProperties diagnosticSettingsPropertiesType = {}
+
+@description('Enable mysql diagnostic settings resource.')
+var enableMysqlDiagnosticSettings  = (empty(diagnosticSettingsProperties.?diagnosticReceivers.?workspaceId) && empty(diagnosticSettingsProperties.?diagnosticReceivers.?eventHub) && empty(diagnosticSettingsProperties.?diagnosticReceivers.?storageAccountId) && empty(diagnosticSettingsProperties.?diagnosticReceivers.?marketplacePartnerId)) ? false : true
+
+resource mysqlDiagnosticSettings 'Microsoft.Insights/diagnosticSettings@2021-05-01-preview' = if (enableMysqlDiagnosticSettings) {
+  name: '${serverName}-diagnostic-settings'
+  properties: {
+    eventHubAuthorizationRuleId: diagnosticSettingsProperties.diagnosticReceivers.?eventHub.?EventHubAuthorizationRuleId ?? null
+    eventHubName:  diagnosticSettingsProperties.diagnosticReceivers.?eventHub.?EventHubName ?? null
+    logAnalyticsDestinationType: diagnosticSettingsProperties.diagnosticReceivers.?logAnalyticsDestinationType ?? null
+    logs: diagnosticSettingsProperties.?logs ?? null
+    marketplacePartnerId: diagnosticSettingsProperties.diagnosticReceivers.?marketplacePartnerId ?? null
+    metrics: diagnosticSettingsProperties.?metrics ?? null
+    serviceBusRuleId: diagnosticSettingsProperties.?serviceBusRuleId ?? null
+    storageAccountId: diagnosticSettingsProperties.diagnosticReceivers.?storageAccountId ?? null
+    workspaceId: diagnosticSettingsProperties.diagnosticReceivers.?workspaceId ?? null
+  }
+  scope: mysqlServer
+}
+
+@description('MySQL Single Server Resource id')
+output id string = mysqlServer.id
+@description('MySQL Single Server fully Qualified Domain Name')
+output fqdn string = createMode != 'Replica' ? mysqlServer.properties.fullyQualifiedDomainName : ''
+
+
+// user-defined types
 type diagnosticSettingsRetentionPolicyType = {
   @description('the number of days for the retention in days. A value of 0 will retain the events indefinitely.')
   days: int
@@ -276,29 +308,24 @@ type diagnosticSettingsPropertiesType = {
   diagnosticReceivers: diagnosticSettingsReceiversType?
 }
 
-@description('Provide mysql diagnostic settings properties.')
-param diagnosticSettingsProperties diagnosticSettingsPropertiesType = {}
-
-@description('Enable mysql diagnostic settings resource.')
-var enableMysqlDiagnosticSettings  = (empty(diagnosticSettingsProperties.?diagnosticReceivers.?workspaceId) && empty(diagnosticSettingsProperties.?diagnosticReceivers.?eventHub) && empty(diagnosticSettingsProperties.?diagnosticReceivers.?storageAccountId) && empty(diagnosticSettingsProperties.?diagnosticReceivers.?marketplacePartnerId)) ? false : true
-
-resource mysqlDiagnosticSettings 'Microsoft.Insights/diagnosticSettings@2021-05-01-preview' = if (enableMysqlDiagnosticSettings) {
-  name: '${serverName}-diagnostic-settings'
-  properties: {
-    eventHubAuthorizationRuleId: diagnosticSettingsProperties.diagnosticReceivers.?eventHub.?EventHubAuthorizationRuleId ?? null
-    eventHubName:  diagnosticSettingsProperties.diagnosticReceivers.?eventHub.?EventHubName ?? null
-    logAnalyticsDestinationType: diagnosticSettingsProperties.diagnosticReceivers.?logAnalyticsDestinationType ?? null
-    logs: diagnosticSettingsProperties.?logs ?? null
-    marketplacePartnerId: diagnosticSettingsProperties.diagnosticReceivers.?marketplacePartnerId ?? null
-    metrics: diagnosticSettingsProperties.?metrics ?? null
-    serviceBusRuleId: diagnosticSettingsProperties.?serviceBusRuleId ?? null
-    storageAccountId: diagnosticSettingsProperties.diagnosticReceivers.?storageAccountId ?? null
-    workspaceId: diagnosticSettingsProperties.diagnosticReceivers.?workspaceId ?? null
-  }
-  scope: mysqlServer
+type firewallRulesType = {
+  @minLength(1)
+  @maxLength(128)
+  @description('The resource name.')
+  name: string
+  @description('The start IP address of the server firewall rule. Must be IPv4 format.')
+  startIpAddress: string
+  @description('The end IP address of the server firewall rule. Must be IPv4 format.')
+  endIpAddress: string
 }
 
-@description('MySQL Single Server Resource id')
-output id string = mysqlServer.id
-@description('MySQL Single Server fully Qualified Domain Name')
-output fqdn string = mysqlServer.properties.fullyQualifiedDomainName
+type virtualNetworkRuleType = {
+  @minLength(1)
+  @maxLength(128)
+  @description('The resource name.')
+  name: string
+  @description('Create firewall rule before the virtual network has vnet service endpoint enabled.')
+  ignoreMissingVnetServiceEndpoint: bool
+  @description('The ARM resource id of the virtual network subnet.')
+  virtualNetworkSubnetId: string
+}

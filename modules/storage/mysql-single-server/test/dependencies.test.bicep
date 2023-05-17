@@ -62,10 +62,19 @@ resource managedIdentity02 'Microsoft.ManagedIdentity/userAssignedIdentities@201
 resource logAnalyticsWorkspace 'Microsoft.OperationalInsights/workspaces@2022-10-01' = {
   name: '${name}-${prefix}-law'
   location: location
+  properties: {
+    retentionInDays: 30
+    sku: {
+      name: 'pergb2018'
+    }
+    workspaceCapping: {
+      dailyQuotaGb: 1
+    }
+  }
 }
 
 resource storageAccount 'Microsoft.Storage/storageAccounts@2022-05-01' = {
-  name: '${prefix}${name}01'
+  name: '${name}${prefix}01'
   kind: 'StorageV2'
   sku: {
     name: 'Standard_LRS'
@@ -77,13 +86,20 @@ resource storageAccount 'Microsoft.Storage/storageAccounts@2022-05-01' = {
 }
 
 resource eventHubNamespace 'Microsoft.EventHub/namespaces@2021-11-01' = {
-  name: '${prefix}-evhns-${name}-01'
+  name: '${name}-${prefix}-evhns-01'
   location: location
+  properties: {
+    disableLocalAuth: false
+    zoneRedundant: false
+  }
 }
 
 resource eventHub 'Microsoft.EventHub/namespaces/eventhubs@2021-11-01' = {
-  name: '${prefix}-evh-${name}-01'
+  name: '${name}-${prefix}-evh-01'
   parent: eventHubNamespace
+  properties: {
+    partitionCount: 4
+  }
 }
 
 resource authorizationRule 'Microsoft.EventHub/namespaces/authorizationRules@2022-01-01-preview' = {
