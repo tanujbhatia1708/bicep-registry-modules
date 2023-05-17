@@ -7,7 +7,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.17.1.54307",
-      "templateHash": "12788647738129916687"
+      "templateHash": "15701384432756425890"
     }
   },
   "definitions": {
@@ -277,12 +277,14 @@
     },
     "administratorLogin": {
       "type": "string",
+      "defaultValue": "",
       "metadata": {
-        "description": "Required. The administrator username of the server. Can only be specified when the server is being created."
+        "description": "Required. The administrator username of the server. Can only be specified when createMode is 'Default'."
       }
     },
     "administratorLoginPassword": {
       "type": "securestring",
+      "defaultValue": "",
       "metadata": {
         "description": "Required. The administrator password of the server. Can only be specified when the server is being created."
       }
@@ -407,21 +409,21 @@
       "type": "string",
       "defaultValue": "GP_Gen5_2",
       "metadata": {
-        "description": "Optional.\tThe name of the sku, typically, tier + family + cores, e.g. B_Gen4_1, GP_Gen5_8."
+        "description": "Optional. The name of the sku, typically, tier + family + cores, e.g. B_Gen4_1, GP_Gen5_8."
       }
     },
     "skuCapacity": {
       "type": "int",
       "defaultValue": 2,
       "metadata": {
-        "description": "Azure database for MySQL compute capacity in vCores (2,4,8,16,32)"
+        "description": "Optional. Azure database for MySQL compute capacity in vCores (2,4,8,16,32)"
       }
     },
     "SkuSizeMB": {
       "type": "int",
       "defaultValue": 5120,
       "metadata": {
-        "description": "Azure database for MySQL Sku Size "
+        "description": "Optional. Azure database for MySQL Sku Size "
       }
     },
     "SkuTier": {
@@ -433,14 +435,14 @@
         "MemoryOptimized"
       ],
       "metadata": {
-        "description": "Azure database for MySQL pricing tier"
+        "description": "Optional. Azure database for MySQL pricing tier"
       }
     },
     "skuFamily": {
       "type": "string",
       "defaultValue": "Gen5",
       "metadata": {
-        "description": "Azure database for MySQL sku family"
+        "description": "Optional. Azure database for MySQL sku family"
       }
     },
     "sourceServerResourceId": {
@@ -509,8 +511,10 @@
         }
       }
     ],
+    "validAdministratorLogin": "[if(and(equals(parameters('createMode'), 'Default'), not(empty(parameters('administratorLogin')))), parameters('administratorLogin'), null())]",
+    "validAdministratorLoginPassword": "[if(and(equals(parameters('createMode'), 'Default'), not(empty(parameters('administratorLoginPassword')))), parameters('administratorLoginPassword'), null())]",
     "sslEnforcement": "[if(equals(parameters('minimalTlsVersion'), 'TLSEnforcementDisabled'), 'Disabled', 'Enabled')]",
-    "validStorageAutogrow": "[if(equals(parameters('createMode'), 'Replica'), null(), if(parameters('enableStorageAutogrow'), 'Enabled', 'Disabled'))]",
+    "validStorageAutogrow": "[if(equals(parameters('createMode'), 'Replica'), '', if(parameters('enableStorageAutogrow'), 'Enabled', 'Disabled'))]",
     "enableMysqlDiagnosticSettings": "[if(and(and(and(empty(tryGet(tryGet(parameters('diagnosticSettingsProperties'), 'diagnosticReceivers'), 'workspaceId')), empty(tryGet(tryGet(parameters('diagnosticSettingsProperties'), 'diagnosticReceivers'), 'eventHub'))), empty(tryGet(tryGet(parameters('diagnosticSettingsProperties'), 'diagnosticReceivers'), 'storageAccountId'))), empty(tryGet(tryGet(parameters('diagnosticSettingsProperties'), 'diagnosticReceivers'), 'marketplacePartnerId'))), false(), true())]"
   },
   "resources": {
@@ -532,8 +536,8 @@
       },
       "properties": {
         "createMode": "[parameters('createMode')]",
-        "administratorLogin": "[parameters('administratorLogin')]",
-        "administratorLoginPassword": "[parameters('administratorLoginPassword')]",
+        "administratorLogin": "[variables('validAdministratorLogin')]",
+        "administratorLoginPassword": "[variables('validAdministratorLoginPassword')]",
         "version": "[parameters('version')]",
         "sslEnforcement": "[variables('sslEnforcement')]",
         "minimalTlsVersion": "[parameters('minimalTlsVersion')]",
@@ -542,7 +546,7 @@
           "storageMB": "[mul(parameters('storageSizeGB'), 1024)]",
           "backupRetentionDays": "[parameters('backupRetentionDays')]",
           "geoRedundantBackup": "[parameters('geoRedundantBackup')]",
-          "storageAutogrow": "[variables('validStorageAutogrow')]"
+          "storageAutogrow": "[coalesce(variables('validStorageAutogrow'), null())]"
         },
         "publicNetworkAccess": "[parameters('publicNetworkAccess')]",
         "sourceServerId": "[if(not(equals(parameters('createMode'), 'Default')), parameters('sourceServerResourceId'), null())]",
@@ -916,7 +920,7 @@
       "metadata": {
         "description": "MySQL Single Server fully Qualified Domain Name"
       },
-      "value": "[reference('mysqlServer').fullyQualifiedDomainName]"
+      "value": "[if(not(equals(parameters('createMode'), 'Replica')), reference('mysqlServer').fullyQualifiedDomainName, '')]"
     }
   }
 }
