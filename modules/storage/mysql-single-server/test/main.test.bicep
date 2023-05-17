@@ -111,8 +111,6 @@ module test_03_replicaMysqlServer '../main.bicep' = {
     location: location
     createMode: 'Replica'
     sourceServerResourceId: test_03_primaryMysqlServer.outputs.id
-    administratorLogin: administratorLogin
-    administratorLoginPassword: administratorLoginPassword
   }
 }
 
